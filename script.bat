@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-set "work=D:\BOSY\L2\S4\Mr Naina\SPRINT\SPRINT\src\com\example"
+set "work=\src\com\example"
 
 set "libpath=C:\xampp\tomcat\lib\servlet-api.jar"
 
