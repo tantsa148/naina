@@ -1,80 +1,93 @@
-package mg.ituprom16.controller;
-
-import java.io.File;
+package org.myspringframework.controller;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.lang.ModuleLayer.Controller;
-import java.util.Vector;
-
-import jakarta.servlet.ServletContext;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import mg.ituprom16.annotation.*;
+import java.lang.reflect.Modifier;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
+import java.util.*;
+import java.net.URL;
+import java.io.*;
+import java.util.*;
+import jakarta.servlet.*;
+import jakarta.servlet.http.*;
+import org.myspringframework.util.*;
+import java.net.URL;
+import java.net.URLDecoder;
 
-public class FrontController extends HttpServlet{
+public class FrontController extends HttpServlet {
+    String packagecontroller;
+    String prefix;
+    String suffix;
+    List<Class<?>> controllers = null;
+    boolean isChecked=false;
+    Map<String, Mapping> listehashMap=null;
+    public void init() throws ServletException {
+        this.packagecontroller = getServletContext().getInitParameter("packageController");
+        this.prefix = getServletContext().getInitParameter("prefix");
+        this.suffix = getServletContext().getInitParameter("suffix");
+        Fonction f=new Fonction();
+        try {
+            this.controllers = f.getClassesFromPackage(this.packagecontroller);
+            this.listehashMap=f.mapControllersToRoutes(this.controllers);
+        } catch (Exception ex) {
+            throw new ServletException(ex.getMessage());
+        }
 
-    private String packageSource;
-    private Vector<Class> lsController;
-    private boolean check = false;
-    public void init() throws ServletException{
-        try
-        {
-            this.packageSource = this.getInitParameter("package-source");
-        }
-        catch(Exception e)
-        {
-            System.out.println("Error Init package source");
-            e.printStackTrace();
-        }
     }
-
-    public void getControllers() throws Exception
-    {
-        ServletContext context = getServletContext();
-        String classpath = context.getResource(this.packageSource).getPath();
-        String namePackage = packageSource.split("classes/")[1].replace("/", ".");
-        File classpathDirectory = new File(classpath);
-
-        this.lsController = new Vector<Class>();
-        File[] listeFiles = classpathDirectory.listFiles();
-
-        for(File file : listeFiles)
-        {   
-            if (file.isFile() && file.getName().endsWith(".class")) {
-                String className = file.getName().substring(0,file.getName().length()-6);
-                Class clazz = Thread.currentThread().getContextClassLoader().loadClass(namePackage+"."+className);
-                if (clazz.isAnnotationPresent( mg.ituprom16.annotation.Controller.class)) {
-                    this.lsController.add(clazz);
-                }
+    protected void processRequest(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+        response.setContentType("text/plain");
+        Fonction f=new Fonction();
+        PrintWriter out = response.getWriter();
+        String fullUrl = request.getRequestURI();
+        String[] parts = fullUrl.split("/");
+        String url = "/" + Arrays.stream(parts).skip(2).collect(Collectors.joining("/"));
+        Mapping map=f.verifierSiDansHashMap(this.listehashMap,url);
+        if(map!=null){
+            Object reponse = f.executeMethod(map.getNomClasse(), map.getNomMethode());
+            if (reponse instanceof String) {
+                System.out.println("Le type de retour est String : " + reponse);
             }
+            else if (reponse instanceof ModelAndView) {
+                ModelAndView rep=(ModelAndView)reponse;
+                String urljsp=this.prefix+rep.getUrl()+this.suffix;
+                Map<String, Object> data=rep.getData();
+                Set<String> keys = data.keySet(); 
+                out.println("Url jsp : " + urljsp); 
+                for (String key : keys) { // Parcourez chaque clé
+                    out.println("Clé trouvée : " + key); 
+                    Object value=data.get(key);
+                    out.println("Type Data : " + value.getClass().getName()); 
+                    out.println("Data : " + value);
+                    request.setAttribute(key, value);
+                    request.getRequestDispatcher(urljsp).forward(request, response);  
+                }  
+            }
+            else{
+                throw new ServletException("Type de retour not found.");
+            }
+            
         }
-    }
-    @Override
-    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        processRequest(req, resp);
-    }
-
-    @Override
-    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-       processRequest(req, resp);
-    }
-
-    public void processRequest(HttpServletRequest req, HttpServletResponse resp)throws ServletException, IOException{
-
-        PrintWriter writer = resp.getWriter();
-        if (this.check==false) {
-            try {
-                getControllers();
-                this.check = true;
-            } catch (Exception e) {
-                writer.print(e.getMessage());
-            }   
-        }  
-        for (int i = 0; i < this.lsController.size(); i++) {
-            writer.print(lsController.get(i).getSimpleName()+"\n");
+        else{
+                throw new ServletException("URL NOT FOUND.");
         }
+         
+        
+   }
+
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
+        processRequest(req, res);
     }
+
+    @Override
+    protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+        processRequest(request, response);
+    }
+
 }
+
