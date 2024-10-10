@@ -3,10 +3,7 @@ package util;
 import annotations.AnnotationController;
 import annotations.Get;
 import annotations.Param;
-import annotations.Restapi;
-import com.google.gson.Gson;
 import frameworks.ModelView;
-import frameworks.MySession;
 
 import javax.servlet.http.HttpServletRequest;
 import java.io.File;
@@ -103,27 +100,18 @@ public class Methode {
             // Find the method that matches the name and parameters
             Method method = getMethod(clazz, mapping.getMethodName(), request);
 
-            List<String> FormFieldsNames = getFieldsNamesList(request);
+            List<String> parameterNames = getParameterNamesList(request);
             Object[] parameterValues = new Object[method.getParameterCount()];
-            System.out.println(FormFieldsNames.size() + " " + method.getParameterCount());
             Employe emp = new Employe();
 
             boolean empPopulated = false;
-            for (int i = 0; i < method.getParameterCount(); i++) {
-                Class<?> paramType = method.getParameterTypes()[i];
-                if (paramType == MySession.class) {
-                    parameterValues[i] = new MySession(request.getSession());
-                } else if (i < FormFieldsNames.size()) {
-                    //String parameterName = FormFieldsNames.get(i);
-                    if (FormFieldsNames.get(i).contains(".")) {
-                        while(i < FormFieldsNames.size()) {
-                            populateEmploye(request, FormFieldsNames.get(i), emp);
-                            empPopulated = true;
-                            i++;
-                        }
-                    } else {
-                        parameterValues[i] = request.getParameter(FormFieldsNames.get(i));
-                    }
+            for (int i = 0; i < parameterNames.size(); i++) {
+                String parameterName = parameterNames.get(i);
+                if (parameterName.contains(".")) {
+                    populateEmploye(request, parameterName, emp);
+                    empPopulated = true;
+                } else {
+                    parameterValues[i] = request.getParameter(parameterName);
                 }
             }
 
@@ -145,15 +133,12 @@ public class Methode {
                 result = method.invoke(instance);
             }
 
-            if (method.isAnnotationPresent(Restapi.class)) {
-                if (result instanceof ModelView) {
-                    ModelView mv = (ModelView) result;
-                    return convertToJson(mv.getData());
-                } else {
-                    return convertToJson(result);
-                }
-            } else {
+            if (result instanceof String) {
                 return result;
+            } else if (result instanceof ModelView) {
+                return result;
+            } else {
+                System.out.println("Le type de retour n'existe pas");
             }
         } else {
             System.out.println("Mapping not found");
@@ -164,30 +149,15 @@ public class Methode {
     private void populateEmploye(HttpServletRequest request, String parameterName, Employe emp) throws IllegalAccessException {
         Class<?> clazzemp = emp.getClass();
         Field[] fields = clazzemp.getDeclaredFields();
-    
+
         for (Field field : fields) {
             field.setAccessible(true);
-            String fieldName = field.getName();
-            String requestParamName = parameterName.endsWith(fieldName) ? parameterName : parameterName + "." + fieldName;
-            String value = request.getParameter(requestParamName);
-            
-            if (value != null && !value.isEmpty()) {
-                try {
-                    if (field.getType() == int.class || field.getType() == Integer.class) {
-                        field.set(emp, Integer.parseInt(value));
-                    } else if (field.getType() == long.class || field.getType() == Long.class) {
-                        field.set(emp, Long.parseLong(value));
-                    } else if (field.getType() == double.class || field.getType() == Double.class) {
-                        field.set(emp, Double.parseDouble(value));
-                    } else if (field.getType() == float.class || field.getType() == Float.class) {
-                        field.set(emp, Float.parseFloat(value));
-                    } else if (field.getType() == boolean.class || field.getType() == Boolean.class) {
-                        field.set(emp, Boolean.parseBoolean(value));
-                    } else {
-                        field.set(emp, value);
-                    }
-                } catch (NumberFormatException e) {
-                    System.err.println("Error parsing value for field " + fieldName + ": " + e.getMessage());
+            if (parameterName.endsWith(field.getName())) {
+                String value = request.getParameter(parameterName);
+                if (field.getType() == int.class) {
+                    field.setInt(emp, Integer.parseInt(value));
+                } else if (field.getType() == String.class) {
+                    field.set(emp, value);
                 }
             }
         }
@@ -195,43 +165,48 @@ public class Methode {
 
     private Method getMethod(Class<?> clazz, String methodName, HttpServletRequest request) throws NoSuchMethodException {
         Method[] methods = clazz.getMethods();
-        List<String> parameterNames = getFieldsNamesList(request);
+        Method targetMethod = null;
+
+        List<String> parameterNames = getParameterNamesList(request);
 
         for (Method method : methods) {
             if (method.getName().equals(methodName)) {
+                Parameter[] parameters = method.getParameters();
                 if (paramSize(method, parameterNames)) {
-                    Parameter[] parameters = method.getParameters();
                     boolean matches = true;
-                    int formParamIndex = 0;
-
-                    for (Parameter param : parameters) {
-                        if (param.getType() == MySession.class) {
-                            continue;  // Ignorer les paramètres MySession dans la comparaison
-                        }
-
-                        Param paramAnnotation = param.getAnnotation(Param.class);
+                    for(int i = 0; i < parameters.length; i++) {
+                        Param paramAnnotation = parameters[i].getAnnotation(Param.class);
                         if (paramAnnotation != null) {
                             String paramName = paramAnnotation.name();
-                            if (formParamIndex >= parameterNames.size() ||
-                                    !parameterNames.get(formParamIndex).equals(paramName) &&
-                                            !parameterNames.get(formParamIndex).startsWith(paramName + ".")) {
-                                matches = false;
-                                break;
+                            String requestParamName = parameterNames.get(i);
+                            if (requestParamName.contains(".")) {
+                                String[] parts = requestParamName.split("\\.");
+                                if (!parts[0].equals(paramName)) {
+                                    matches = false;
+                                    break;
+                                }
+                            } else {
+                                if (!requestParamName.equals(paramName)) {
+                                    matches = false;
+                                    break;
+                                }
                             }
-                            formParamIndex++;
                         } else {
-                            throw new IllegalArgumentException("Parameter annotation @Param not found for method parameter : ETU002604");
+                            throw new IllegalArgumentException("Parameter annotation @Param not found for method parameter");
                         }
                     }
-
                     if (matches) {
-                        return method;
+                        targetMethod = method;
+                        break;
                     }
                 }
             }
         }
 
-        throw new NoSuchMethodException("No such method found with the given name and parameter names.");
+        if (targetMethod == null) {
+            throw new NoSuchMethodException("No such method found with the given name and parameter names.");
+        }
+        return targetMethod;
     }
 
     public String getUrlAfterSprint(HttpServletRequest request) {
@@ -241,7 +216,7 @@ public class Methode {
         return uri.substring(contextPath.length()); // This should be "/hola"
     }
 
-    public List<String> getFieldsNamesList(HttpServletRequest request) {
+    public List<String> getParameterNamesList(HttpServletRequest request) {
         Enumeration<String> parameterNames = request.getParameterNames();
 
         List<String> parameterNamesList = new ArrayList<>();
@@ -252,70 +227,45 @@ public class Methode {
 
         return parameterNamesList;
     }
-                                            //Liste des champs du formulaire
-    public boolean paramSize(Method method, List<String> FormFieldsNames) {
+
+    public boolean paramSize(Method method, List<String> parameterNames) {
+        boolean samesize = false;
         Parameter[] parameters = method.getParameters();
-        int formFieldCount = FormFieldsNames.size();
-        int methodParamCount = parameters.length;
-        int specialParamCount = 0;
-
-        for (Parameter param : parameters) {
-            if (param.getType() == MySession.class) {
-                specialParamCount++;
-            }
-        }
-
-        if (isObject(FormFieldsNames)) {
-            // Logique existante pour les objets
-            int argumentCount = 0;
-            for (Parameter parameter : parameters) {
-                if (parameter.getType().isPrimitive() || parameter.getType() == String.class) {
-                    argumentCount++;
+        int argumentCount = 0;
+        if(isObject(parameterNames)) {
+            for(Parameter parameter : parameters) {
+                if(parameter.getType().isPrimitive()) {
+                    argumentCount += 1;
                     continue;
-                }
-                if (parameter.getType() == MySession.class) {
-                    continue;  // Ne pas compter MySession comme un argument de formulaire
                 }
                 Class<?> argClass = parameter.getType();
                 Field[] fields = argClass.getDeclaredFields();
-                argumentCount += fields.length;
+                for(Field ignored : fields) {
+                    argumentCount += 1;
+                }
             }
-            return argumentCount == formFieldCount;
+
+            if(argumentCount == parameterNames.size()) {
+                samesize = true;
+            }
         } else {
-            // Comparer le nombre de champs de formulaire au nombre de paramètres
-            // de méthode, en excluant les paramètres spéciaux comme MySession
-            return formFieldCount == (methodParamCount - specialParamCount);
+            if(parameterNames.size() == parameters.length) {
+                samesize = true;
+            }
         }
+
+        return samesize;
     }
 
-    public boolean isObject(List<String> FormFieldsNames) {
+    public boolean isObject(List<String> parameterNames) {
         boolean isObjet = false;
-        for(String paramName : FormFieldsNames) {
+        for(String paramName : parameterNames) {
             if (paramName.contains(".")) {
                 isObjet = true;
                 break;
             }
         }
         return isObjet;
-    }
-
-    public String convertToJson(Object objet) {
-        Gson gson = new Gson();
-        return gson.toJson(objet);
-    }
-
-    public boolean isJsonResponse(Mapping mapping) throws ClassNotFoundException {
-        if (mapping == null) {
-            return false;
-        }
-        Class<?> clazz = Class.forName(mapping.getClassName());
-        Method[] methods = clazz.getDeclaredMethods();
-        for (Method method : methods) {
-            if (method.getName().equals(mapping.getMethodName())) {
-                return method.isAnnotationPresent(Restapi.class);
-            }
-        }
-        return false;
     }
 
 }

@@ -4,7 +4,6 @@ import util.Mapping;
 import util.Methode;
 
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.List;
@@ -38,50 +37,23 @@ public class FrontController extends HttpServlet {
     protected void processRequest(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException, ClassNotFoundException, InvocationTargetException, NoSuchMethodException, InstantiationException, IllegalAccessException {
 
-        //String urlString = request.getRequestURL().toString();
+        String urlString = request.getRequestURL().toString();
         url = methode.getUrlAfterSprint(request);
         hashmap = methode.urlMethod(controllers, url);
 
         result = methode.execute(methode.getMapping(hashmap), request);
 
-        if (result instanceof String) {
-            if (methode.isJsonResponse(methode.getMapping(hashmap))) {
-                sendJsonResponse(response, (String) result);
-            } else {
-                request.setAttribute("value", result);
-                forwardToJsp(request, response);
-            }
+        if(result instanceof String) {
+            request.setAttribute("value", result);
         } else if (result instanceof ModelView) {
-            ModelView mv = (ModelView) result;
-            if (methode.isJsonResponse(methode.getMapping(hashmap))) {
-                sendJsonResponse(response, methode.convertToJson(mv.getData()));
-            } else {
-                request.setAttribute("data", mv.getSingleValue());
-                request.getRequestDispatcher(mv.getUrl()).forward(request, response);
-            }
-        } else if (result != null) {
-            // Assume any other non-null result from a @Restapi method should be sent as JSON
-            if (methode.isJsonResponse(methode.getMapping(hashmap))) {
-                sendJsonResponse(response, methode.convertToJson(result));
-            } else {
-                throw new ServletException("Unexpected return type for non-Restapi method");
-            }
+            request.setAttribute("data", ((ModelView) result).getData());
+            request.getRequestDispatcher(((ModelView) result).getUrl()).forward(request, response);
         } else {
-            throw new ServletException("No result returned from controller method");
+            throw new NoSuchMethodException("No such method found with the given name and parameter count.");
         }
-    }
 
-    private void sendJsonResponse(HttpServletResponse response, String jsonContent) throws IOException {
-        response.setContentType("application/json");
-        response.setCharacterEncoding("UTF-8");
-        PrintWriter out = response.getWriter();
-        out.print(jsonContent);
-        out.flush();
-    }
-
-    private void forwardToJsp(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         request.setAttribute("hashmap", hashmap);
-        request.setAttribute("url", request.getRequestURL().toString());
+        request.setAttribute("url", urlString);
         request.setAttribute("controllers", controllersName);
         request.getRequestDispatcher("/index.jsp").forward(request, response);
     }
