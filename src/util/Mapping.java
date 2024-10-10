@@ -1,26 +1,19 @@
-package org.myspringframework.util;
+package util;
+
 public class Mapping {
-     String nomClasse;
-     String nomMethode;
+    private String className;
+    private String methodName;
 
-    public Mapping(String nomClasse, String nomMethode) {
-        this.nomClasse = nomClasse;
-        this.nomMethode = nomMethode;
+    public Mapping (String className, String methodName) {
+        this.className = className;
+        this.methodName = methodName;
     }
 
-    public String getNomClasse() {
-        return nomClasse;
+    public String getClassName() {
+        return className;
     }
 
-    public void setNomClasse(String nomClasse) {
-        this.nomClasse = nomClasse;
-    }
-
-    public String getNomMethode() {
-        return nomMethode;
-    }
-
-    public void setNomMethode(String nomMethode) {
-        this.nomMethode = nomMethode;
+    public String getMethodName() {
+        return methodName;
     }
 }

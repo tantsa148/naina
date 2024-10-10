@@ -1,36 +1,58 @@
 @echo off
 setlocal
 
-set "work=\src\com\example"
+set "nom_projet=sprint9"
 
-set "libpath=C:\xampp\tomcat\lib\servlet-api.jar"
+set "work=C:\xampp\tomcat\work\Sprint-S4"
 
-set "output=%work%\src"
+set "tomcat_webapps=C:\xampp\tomcat\webapps"
 
-set "%temp=%output%\temp"
- 
-copy "%output%\annotations\*.java" "%temp%"
+set "libpath=C:\xampp\tomcat\work\Sprint-S4\lib\*"
 
-copy "%output%\frameworks\*.java" "%temp%"
+set "bin=%work%\bin"
 
-copy "%output%\controllers\*.java" "%temp%"
+javac -cp "%libpath%" -d %bin% src/frameworks/*.java src/controllers/*.java src/annotations/*.java src/util/*.java
 
-copy "%output%\util\*.java" "%temp%"
+jar cf frontcontrol.jar -C "%bin%" .
 
-javac -cp "%libpath%" -d "%output%" "%temp%*.java"
+copy frontcontrol.jar "%libpath%"
 
-cd /d "%output%\controller"
+del frontcontrol.jar
 
-jar cvf frontcontrol.jar -C "%output%\frameworks" . -C %libpath% .
+rem ----------------------------------------------------------------------
 
-copy frontcontrol.jar "%work%\jar"
+set "repertoire_temp=%TEMP%\%nom_projet%"
 
-del "%output%\controllers\*.class"
+set "temp_classes=%repertoire_temp%\WEB-INF\classes"
 
-del "%output%\frameworks\*.class"
+mkdir "%repertoire_temp%"
 
-del "%output%\util\*.class"
+mkdir "%repertoire_temp%\WEB-INF"
 
-del "%output%\annotations\*.class"
+mkdir "%repertoire_temp%\WEB-INF\classes"
 
+mkdir "%repertoire_temp%\WEB-INF\lib"
+
+copy "%work%\pages\*.jsp" "%repertoire_temp%"
+
+copy "%work%\lib\*" "%repertoire_temp%\WEB-INF\lib"
+
+copy "%work%\web.xml" "%repertoire_temp%\WEB-INF"
+
+javac -cp "%libpath%" -d %temp_classes% src/controllers/*.java src/annotations/*.java src/util/*.java
+
+IF EXIST "%repertoire_temp%\*.tmp" (
+    del /s /q "%repertoire_temp%\*.tmp"
+) ELSE (
+    echo Aucun fichier temporaire à supprimer.
+)
+
+cd "%repertoire_temp%"
+jar -cvf "%nom_projet%.war" *
+
+move /y "%nom_projet%.war" "%tomcat_webapps%"
+
+rmdir /S /Q "%repertoire_temp%"
+
+echo Done!
 pause
